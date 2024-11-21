@@ -2,7 +2,7 @@
 import { CoinNFT } from "./CoinNFT.ts";
 
 export class CacheLocation {
-  private static locations: Map<string, CacheLocation> = new Map();
+  public static locations: Map<string, CacheLocation> = new Map();
 
   private constructor(
     public i: number,
@@ -23,8 +23,11 @@ export class CacheLocation {
     location.cacheCoinIds = coins;
   }
 
-  public static getCache(i: number, j: number): CoinNFT[] {
-    const location = this.getLocation(i, j);
-    return location.cacheCoinIds;
+  public toMemento(): string {
+    return JSON.stringify(this.cacheCoinIds);
+  }
+
+  public fromMemento(memento: string): void {
+    this.cacheCoinIds = JSON.parse(memento);
   }
 }

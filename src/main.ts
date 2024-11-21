@@ -2,6 +2,7 @@
 import leaflet from "leaflet";
 import { CacheLocation } from "./CacheLocation.ts";
 import { CoinNFT } from "./CoinNFT.ts";
+import { Memento } from "./Memento.ts";
 
 // Style sheets
 import "leaflet/dist/leaflet.css";
@@ -80,14 +81,67 @@ const statusPanel = document.querySelector<HTMLDivElement>("#statusPanel")!;
 statusPanel.innerHTML = "No points yet...";
 
 // Display the player's inventory
-const inventoryPanel = document.querySelector<HTMLDivElement>(
-  "#inventoryPanel",
-)!;
+const inventoryPanel = document.querySelector<HTMLDivElement>("#inventoryPanel")!;
 inventoryPanel.innerHTML = "Coin Inventory (0 coins)";
 
+// Function to update player position
 function updatePlayerPosition(lat: number, lng: number) {
   playerPosition = leaflet.latLng(lat, lng);
   playerMarker.setLatLng(playerPosition);
+  map.panTo(playerPosition);
+  regenerateCaches();
+}
+
+// Function to save the current state
+function saveState(): string {
+  const cacheStates = new Map<string, string>();
+  CacheLocation.locations.forEach((location, key) => {
+    cacheStates.set(key, location.toMemento());
+  });
+  const memento = new Memento(
+    { lat: playerPosition.lat, lng: playerPosition.lng },
+    playerCoins,
+    cacheStates
+  );
+  return memento.toString();
+}
+
+// Function to restore a saved state
+function restoreState(state: string) {
+  const memento = Memento.fromString(state);
+  playerPosition = leaflet.latLng(memento.playerPosition.lat, memento.playerPosition.lng);
+  playerMarker.setLatLng(playerPosition);
+  playerCoins = memento.playerCoins;
+  memento.cacheStates.forEach((value, key) => {
+    const [i, j] = key.split(",").map(Number);
+    const cache = CacheLocation.getLocation(i, j);
+    cache.fromMemento(value);
+  });
+  inventory.displayInventory();
+}
+
+// Function to regenerate caches around the player's position
+function regenerateCaches() {
+  map.eachLayer((layer) => {
+    if (layer instanceof leaflet.Rectangle) {
+      map.removeLayer(layer);
+    }
+  });
+
+  for (let i = -NEIGHBORHOOD_SIZE; i < NEIGHBORHOOD_SIZE; i++) {
+    for (let j = -NEIGHBORHOOD_SIZE; j < NEIGHBORHOOD_SIZE; j++) {
+      const cell = latLngToCell(
+        playerPosition.lat + i * TILE_DEGREES,
+        playerPosition.lng + j * TILE_DEGREES,
+      );
+      const cache = CacheLocation.getLocation(cell.i, cell.j);
+      if (cache.cacheCoinIds.length > 0) {
+        spawnCache(playerPosition.lat, playerPosition.lng, i, j);
+      } else if (luck([cell.i, cell.j].toString()) < CACHE_SPAWN_PROBABILITY) {
+        spawnCache(playerPosition.lat, playerPosition.lng, i, j);
+      }
+    }
+  }
 }
 
 function latLngToCell(lat: number, lng: number): { i: number; j: number } {
@@ -168,6 +222,7 @@ function spawnCache(
   });
 }
 
+// Add event listeners for movement buttons
 document.getElementById("north")!.addEventListener("click", () => {
   updatePlayerPosition(playerPosition.lat + TILE_DEGREES, playerPosition.lng);
 });
